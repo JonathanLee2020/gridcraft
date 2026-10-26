@@ -498,6 +498,7 @@ fn center_across_end(start: u32, limit: u32, continues: impl Fn(u32) -> bool) ->
     end
 }
 
+/// Resolve table and conditional styles before choosing theme defaults and automatic cell ink.
 fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache, t: &Tokens) -> (Look, Option<CfLook>) {
     let mut style = wb.styles.get(sh.style_id(c)).clone();
     if let Some(t) = sh.table_at(c) {
@@ -600,6 +601,7 @@ fn display_text(
     (f.text, f.color.map(numfmt_color), f.numeric, f.fill)
 }
 
+/// Paint the visible sheet and its editor with a shared per-frame conditional-format cache.
 pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let available = ui.available_rect_before_wrap();
@@ -1130,6 +1132,7 @@ fn mirror_shape(shape: &mut egui::Shape, axis: f32) {
     }
 }
 
+/// Paint one visible pane using resolved cell styles, merged regions and theme-aware defaults.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn paint_quadrant(
     p: &Painter,
@@ -3275,7 +3278,8 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     child.set_clip_rect(clip);
     // Match the grid's resolved ink, including explicit table and conditional font colours.
     child.visuals_mut().override_text_color = Some(ink);
-    child.visuals_mut().text_cursor.stroke.color = ink;
+    // The caret must remain visible even when an explicit font colour matches the fill.
+    child.visuals_mut().text_cursor.stroke.color = ink_on(fill);
     crate::formula_bar::editor_widget(app, &mut child, id, font, wrap, erect.width() - 4.0, erect.height() - 2.0);
     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("gridcraft.cell_editor.rect"), erect));
 }
@@ -4333,6 +4337,7 @@ mod tests {
         assert_eq!(center_across_end(0, 1, |_| true), 1);
     }
 
+    /// Automatic ink follows the theme and resolved fill while explicit workbook colours remain intact.
     #[test]
     fn automatic_cell_ink_follows_theme_and_fill_without_changing_explicit_colors() {
         let mut session = gridcraft_engine::Session::new();
@@ -4361,6 +4366,7 @@ mod tests {
         }
     }
 
+    /// Conditional number formats override matching cells without changing unmatched cells.
     #[test]
     fn conditional_number_format_reaches_the_cell_text() {
         // #1163: a rule's number format replaces the cell's own; unmatched cells keep theirs.

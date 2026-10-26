@@ -4,6 +4,7 @@ use gridcraft_engine::Session;
 use gridcraft_ui_egui::{SheetApp, theme};
 use serde_json::json;
 
+/// Run a full application frame so editor colour assertions inspect the painted UI.
 fn frame(ctx: &Context, app: &mut SheetApp) -> egui::FullOutput {
     let mut output =
         ctx.run_ui(RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1200.0, 800.0))), ..Default::default() }, |ui| {
@@ -59,6 +60,7 @@ fn caret(fill: Option<&str>, dark: bool) -> Color32 {
         .expect("caret painted")
 }
 
+/// Automatic editor text and its caret stay readable on default, dark and saturated fills.
 #[test]
 fn caret_contrasts_with_the_cell_fill() {
     assert_eq!(caret(Some("#1F3864"), false), Color32::WHITE, "dark fill, light theme");
@@ -70,6 +72,7 @@ fn caret_contrasts_with_the_cell_fill() {
     assert_eq!(caret(None, false), Color32::BLACK, "no fill, light theme");
 }
 
+/// Switching light to dark and back repaints both ordinary text and merged-cell backdrops.
 #[test]
 fn ordinary_and_merged_cells_repaint_when_the_theme_changes() {
     let ctx = Context::default();
@@ -108,6 +111,7 @@ fn ordinary_and_merged_cells_repaint_when_the_theme_changes() {
     }
 }
 
+/// Check the resolved editor fill and text independently from its high-contrast caret.
 fn assert_editor_colors(session: Session, dark: bool, fill: Color32, ink: Color32) {
     let ctx = Context::default();
     theme::apply(&ctx, dark);
@@ -140,9 +144,11 @@ fn assert_editor_colors(session: Session, dark: bool, fill: Color32, ink: Color3
             _ => None,
         })
         .expect("editor caret");
-    assert_eq!(caret, ink, "resolved editor caret, dark={dark}");
+    assert!(matches!(caret, Color32::BLACK | Color32::WHITE), "caret uses contrasting black or white, dark={dark}");
+    assert!(theme::contrast(caret, fill) >= 4.5, "caret must remain visible independently of text colour, dark={dark}");
 }
 
+/// Editing retains an explicitly chosen font colour while keeping the caret visible.
 #[test]
 fn editor_preserves_explicit_font_color() {
     for dark in [false, true] {
@@ -154,6 +160,7 @@ fn editor_preserves_explicit_font_color() {
     }
 }
 
+/// Conditional fill and font colours must survive entering edit mode in either theme.
 #[test]
 fn editor_preserves_conditional_fill_and_font_color() {
     for dark in [false, true] {
@@ -171,6 +178,7 @@ fn editor_preserves_conditional_fill_and_font_color() {
     }
 }
 
+/// Editing a cell retains its colour-scale result instead of reverting to the base fill.
 #[test]
 fn editor_preserves_color_scale_fill() {
     for dark in [false, true] {
@@ -182,6 +190,7 @@ fn editor_preserves_color_scale_fill() {
     }
 }
 
+/// Table header fill and font colours apply to the editor as they do to the grid.
 #[test]
 fn editor_preserves_table_header_fill_and_font_color() {
     for dark in [false, true] {
@@ -199,6 +208,7 @@ fn editor_preserves_table_header_fill_and_font_color() {
     }
 }
 
+/// The editor matches the grid's blended approximation of a patterned workbook fill.
 #[test]
 fn editor_preserves_patterned_fill() {
     use gridcraft_engine::model::{Color, Fill, PatternType, Style};
@@ -211,5 +221,20 @@ fn editor_preserves_patterned_fill() {
         wb.sheet_mut(0).unwrap().set_style(gridcraft_engine::core::CellRef::new(0, 0), id);
         // The grid approximates patterns with one part foreground to three parts background.
         assert_editor_colors(session, dark, Color32::from_gray(191), Color32::BLACK);
+    }
+}
+
+/// Explicit text may intentionally match its fill; the editing caret must still be visible.
+#[test]
+fn editor_caret_contrasts_when_explicit_font_matches_fill() {
+    for dark in [false, true] {
+        for color in ["#000000", "#FFFFFF"] {
+            let mut session = Session::new();
+            session.new_workbook();
+            session.execute("home.fillColor", json!({"range":"A1", "color":color})).unwrap();
+            session.execute("home.fontColor", json!({"range":"A1", "color":color})).unwrap();
+            let color = Color32::from_hex(color).unwrap();
+            assert_editor_colors(session, dark, color, color);
+        }
     }
 }

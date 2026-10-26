@@ -127,6 +127,7 @@ impl Cat {
     pub const ALL: [Cat; 8] = [Cat::Blue, Cat::Green, Cat::Orange, Cat::Red, Cat::Purple, Cat::Teal, Cat::Amber, Cat::Slate];
 }
 
+/// Convert a packed 0xRRGGBB token into an opaque egui colour.
 const fn rgb(hex: u32) -> Color32 {
     Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
 }
@@ -156,10 +157,12 @@ const SHEET_CONTROL_TEXT: Color32 = rgb(0x1F1F1F);
 const SHEET_TRACK: Color32 = rgb(0xD6D6D6);
 
 impl Tokens {
+    /// The light palette uses white default cells with black automatic text.
     pub fn light() -> Tokens {
         Tokens::palette(false)
     }
 
+    /// The dark palette uses black default cells with white automatic text.
     pub fn dark() -> Tokens {
         Tokens::palette(true)
     }
@@ -226,6 +229,7 @@ impl Tokens {
         }
     }
 
+    /// Select the palette matching the active egui context theme.
     pub fn get(ctx: &egui::Context) -> Tokens {
         if ctx.global_style().visuals.dark_mode { Tokens::dark() } else { Tokens::light() }
     }
@@ -1247,6 +1251,7 @@ mod contrast_tests {
         assert!((contrast(rgb(0x767676), Color32::WHITE) - 4.54).abs() < 0.01);
     }
 
+    /// Sheet surfaces, reference highlights and controls must switch along with the chrome.
     #[test]
     fn sheet_tokens_follow_the_theme() {
         let (l, d) = (Tokens::light(), Tokens::dark());

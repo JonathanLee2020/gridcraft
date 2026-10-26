@@ -64,6 +64,8 @@ fn caret_contrasts_with_the_cell_fill() {
     assert_eq!(caret(Some("#1F3864"), false), Color32::WHITE, "dark fill, light theme");
     assert_eq!(caret(Some("#1F3864"), true), Color32::WHITE, "dark fill, dark theme");
     assert_eq!(caret(Some("#FFFF00"), true), Color32::BLACK, "light fill, dark theme");
+    assert_eq!(caret(Some("#00FF00"), false), Color32::BLACK, "bright green fill, light theme");
+    assert_eq!(caret(Some("#00FF00"), true), Color32::BLACK, "bright green fill, dark theme");
     assert_eq!(caret(None, true), Color32::WHITE, "no fill, dark theme");
     assert_eq!(caret(None, false), Color32::BLACK, "no fill, light theme");
 }

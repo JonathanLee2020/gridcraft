@@ -56,8 +56,8 @@ drawing its own:
 
 - **Colours**: `theme::Tokens`, each with a light and a dark value. Default cells use black
   backgrounds and white text in dark mode, including merged cells and the in-cell editor.
-  Explicit workbook fills and font colours are preserved; automatic text contrasts with a cell's
-  fill. Gridlines, formula references, sheet controls and icons follow the theme.
+  Explicit workbook fills and font colours are preserved; automatic text uses whichever of black
+  or white has the higher WCAG contrast against the resolved cell fill. Gridlines, formula references, sheet controls and icons follow the theme.
   `theme::contrast_tests` holds foreground/background pairs to WCAG 2 (4.5:1 for text, 3:1 for
   glyphs) in both themes. Icons (`icons.rs`, drawn in code) take their paper and category colours
   (`theme::Cat`) from the tokens.
@@ -151,6 +151,7 @@ rpm, tarball), FreeBSD, and web (WASM; WebGPU or WebGL2). Release workflows in
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | minor | Automatic cell ink and in-cell editor text/caret compare WCAG contrast for black and white against the resolved fill, keeping saturated bright green readable |
 | 2026-10-26 | minor | Dark mode uses black default cells with white text, including merged cells and editing; gridlines, formula references and sheet controls follow the theme. Explicit workbook colours stay intact, with contrasting automatic text on filled cells |
 | 2026-10-24 | minor | Engine building blocks for multi-command actions: undo groups, recording buffer, document trust, chunked hidden-name storage |
 | 2026-10-14 | minor | Document Undo's retained-cell-storage budget and latest-step guarantee |

@@ -3287,10 +3287,9 @@ fn popup_dismissed(response: &egui::Response, was_open: bool) -> bool {
     response.ctx.input(|i| !i.focused || i.key_pressed(egui::Key::Escape)) || (was_open && response.clicked_elsewhere())
 }
 
-/// Black or white, whichever reads on `fill` (the threshold chart labels use).
+/// Black or white, whichever has the higher WCAG contrast against the resolved fill.
 fn ink_on(fill: Color32) -> Color32 {
-    let l = 0.299 * fill.r() as f32 + 0.587 * fill.g() as f32 + 0.114 * fill.b() as f32;
-    if l < 150.0 { Color32::WHITE } else { Color32::BLACK }
+    if theme::contrast(Color32::BLACK, fill) >= theme::contrast(Color32::WHITE, fill) { Color32::BLACK } else { Color32::WHITE }
 }
 
 /// The table whose header cell (`row`, `col`) was clicked, not just the first table in the column.
@@ -4342,6 +4341,7 @@ mod tests {
         session.execute("home.fillColor", json!({"range": "B1", "color": "#FFFF00"})).unwrap();
         session.execute("home.fillColor", json!({"range": "C1", "color": "#1F3864"})).unwrap();
         session.execute("home.fontColor", json!({"range": "D1", "color": "#FF0000"})).unwrap();
+        session.execute("home.fillColor", json!({"range": "E1", "color": "#00FF00"})).unwrap();
         let wb = &session.active().unwrap().wb;
         let sh = wb.sheet(0).unwrap();
         let mut cf = CfCache::new();
@@ -4356,6 +4356,9 @@ mod tests {
             assert_eq!(dark_fill.fill, Some(Color32::from_rgb(0x1F, 0x38, 0x64)));
             assert_eq!(dark_fill.text_color, Color32::WHITE);
             assert_eq!(look(wb, 0, sh, CellRef::new(0, 3), &mut cf, &t).0.text_color, Color32::RED);
+            let green_fill = look(wb, 0, sh, CellRef::new(0, 4), &mut cf, &t).0;
+            assert_eq!(green_fill.fill, Some(Color32::GREEN));
+            assert_eq!(green_fill.text_color, Color32::BLACK, "bright green needs black automatic text");
         }
     }
 

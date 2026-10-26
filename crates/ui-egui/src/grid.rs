@@ -490,12 +490,17 @@ fn numfmt_color(c: gridcraft_engine::numfmt::FormatColor) -> Color32 {
 }
 
 /// Last column of a Center Across Selection run starting at `start`: it extends over following columns (up to `limit`) while `continues` holds.
-fn center_across_end(start: u32, limit: u32, continues: impl Fn(u32) -> bool) -> u32 {
+fn center_across_end(start: u32, limit: u32, mut continues: impl FnMut(u32) -> bool) -> u32 {
     let mut end = start;
     while end < limit && end + 1 < MAX_COLS && continues(end + 1) {
         end += 1;
     }
     end
+}
+
+/// Only unmerged, empty cells without a resolved fill can receive text overflow.
+fn empty_for_overflow(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, merges: &[RangeRef], cf: &mut CfCache, t: &Tokens) -> bool {
+    sh.value_ref(c).is_none_or(Value::is_empty) && !merges.iter().any(|m| m.contains(c)) && look(wb, si, sh, c, cf, t).0.fill.is_none()
 }
 
 /// Resolve table and conditional styles before choosing theme defaults and automatic cell ink.
@@ -1188,7 +1193,6 @@ pub(crate) fn paint_quadrant(
             cells.push(CellRef::new(r, c));
         }
     }
-    let empty_ok = |c: CellRef| -> bool { sh.value_ref(c).is_none_or(Value::is_empty) && in_merge(c).is_none() };
     // Backgrounds.
     let mut looks: Vec<(CellRef, Rect, Look, Option<CfLook>)> = Vec::with_capacity(cells.len().min(20_000));
     for &c in &cells {
@@ -1213,8 +1217,10 @@ pub(crate) fn paint_quadrant(
         if sh.row_height(r) == 0.0 {
             continue;
         }
-        let left = (c0.saturating_sub(20)..c0).rev().map(|col| CellRef::new(r, col)).find(|&n| !empty_ok(n));
-        let right = (c1.saturating_add(1)..=c1.saturating_add(20).min(MAX_COLS - 1)).map(|col| CellRef::new(r, col)).find(|&n| !empty_ok(n));
+        let left = (c0.saturating_sub(20)..c0).rev().map(|col| CellRef::new(r, col)).find(|&n| !empty_for_overflow(wb, si, sh, n, &merges, cf, t));
+        let right = (c1.saturating_add(1)..=c1.saturating_add(20).min(MAX_COLS - 1))
+            .map(|col| CellRef::new(r, col))
+            .find(|&n| !empty_for_overflow(wb, si, sh, n, &merges, cf, t));
         for n in [left, right].into_iter().flatten() {
             if same_pane(n.col) && sh.col_width(n.col) > 0.0 && in_merge(n).is_none() {
                 let (lk, cfl) = look(wb, si, sh, n, cf, t);
@@ -1373,7 +1379,7 @@ pub(crate) fn paint_quadrant(
         let across_end = if halign == HAlign::CenterAcross && !rotated && in_merge(c).is_none() {
             center_across_end(c.col, c1 + 20, |col| {
                 let n = CellRef::new(c.row, col);
-                empty_ok(n) && wb.styles.get(sh.style_id(n)).align.h == HAlign::CenterAcross
+                empty_for_overflow(wb, si, sh, n, &merges, cf, t) && wb.styles.get(sh.style_id(n)).align.h == HAlign::CenterAcross
             })
         } else {
             c.col
@@ -1389,14 +1395,22 @@ pub(crate) fn paint_quadrant(
             }
             if matches!(halign, HAlign::Left | HAlign::Center | HAlign::Justify) {
                 let mut cc = c.col + 1;
-                while right - rect.left() < w + 2.0 * pad && cc < MAX_COLS && empty_ok(CellRef::new(c.row, cc)) && cc <= c1 + 20 {
+                while right - rect.left() < w + 2.0 * pad
+                    && cc < MAX_COLS
+                    && empty_for_overflow(wb, si, sh, CellRef::new(c.row, cc), &merges, cf, t)
+                    && cc <= c1 + 20
+                {
                     right = geo.x(sh, cc + 1);
                     cc += 1;
                 }
             }
             if matches!(halign, HAlign::Right | HAlign::Center) {
                 let mut cc = c.col;
-                while rect.right() - left < w + 2.0 * pad && cc > 0 && empty_ok(CellRef::new(c.row, cc - 1)) && cc + 20 > c0 {
+                while rect.right() - left < w + 2.0 * pad
+                    && cc > 0
+                    && empty_for_overflow(wb, si, sh, CellRef::new(c.row, cc - 1), &merges, cf, t)
+                    && cc + 20 > c0
+                {
                     cc -= 1;
                     left = geo.x(sh, cc);
                 }

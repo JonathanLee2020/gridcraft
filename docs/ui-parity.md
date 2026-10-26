@@ -186,6 +186,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | minor | Text overflow and Center Across Selection stop at empty neighbours with resolved explicit, table, conditional or patterned fills; offscreen source discovery respects the same blockers in both themes |
 | 2026-10-26 | minor | Editor text preserves its resolved font colour while the caret independently chooses contrasting black or white, including when explicit text matches its fill; documented the affected rendering and regression-test contracts |
 | 2026-10-26 | minor | In-cell editing uses the grid's shared resolved style and active conditional-format cache, preserving table, conditional, scale and patterned fills plus explicit font colours for text and caret |
 | 2026-10-26 | minor | Automatic cell text and in-cell editor text/caret use the higher-contrast black or white ink; explicit bright green fills now use black in both themes |

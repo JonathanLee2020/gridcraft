@@ -856,7 +856,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     update_cursor(app, ui, &resp, &geo, sh);
     crate::text_box::show(app, ui, &geo, sh);
     if app.editor.as_ref().is_some_and(|e| !e.from_formula_bar) {
-        in_cell_editor(app, ui, &geo, sh, &wb);
+        in_cell_editor(app, ui, &geo, sh, &wb, &mut cf);
     }
     filter_menu(app, ui, &geo, previous_popups.0 == app.grid.filter_menu);
     list_picker(app, ui, &geo, previous_popups.1 == app.grid.list_picker);
@@ -3213,7 +3213,7 @@ fn editor_width(text_w: f32, cell_w: f32, size: f32) -> f32 {
 }
 
 /// Draws the in-cell editor, growing and wrapping with its text, mirroring for right-to-left sheets, choosing contrasting caret ink and clipping cells hidden under frozen panes.
-fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, wb: &Workbook) {
+fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, wb: &Workbook, cf: &mut CfCache) {
     let Some(ed) = app.editor.as_ref() else { return };
     if ed.sheet != wb.active_sheet {
         return;
@@ -3223,7 +3223,11 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
         Some(m) => geo.range_rect(sh, m),
         None => geo.cell_rect(sh, cell),
     };
-    let st = wb.styles.get(sh.style_id(cell)).clone();
+    let t = Tokens::get(ui.ctx());
+    let (lk, _) = look(wb, wb.active_sheet, sh, cell, cf, &t);
+    let st = lk.style;
+    let fill = lk.fill.unwrap_or(t.grid_bg);
+    let ink = lk.text_color;
     let size = st.font.size * 96.0 / 72.0 * geo.z;
     let font = FontId::new(size, theme::cell_family(&st.font.name, st.font.bold, st.font.italic));
     let lines = ed.text.lines().count().max(1) as f32 + if ed.text.ends_with('\n') { 1.0 } else { 0.0 };
@@ -3246,11 +3250,6 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     };
     // Grows to the left on a right-to-left sheet.
     let erect = geo.mirror_rect(Rect::from_min_size(rect.min, vec2(w, h)));
-    let t = Tokens::get(ui.ctx());
-    let fill = match st.fill.pattern {
-        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(t.grid_bg),
-        _ => t.grid_bg,
-    };
     let split = pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h);
     let quadrant = Rect::from_min_max(
         pos2(if cell.col >= geo.fc { split.x } else { geo.cells.left() }, if cell.row >= geo.fr { split.y } else { geo.cells.top() }),
@@ -3274,9 +3273,9 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let id = egui::Id::unique("gridcraft.cell_editor");
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(erect.shrink2(vec2(2.0, 1.0))));
     child.set_clip_rect(clip);
-    // Keep the caret and editor text readable against the actual cell fill.
-    child.visuals_mut().override_text_color = Some(ink_on(fill));
-    child.visuals_mut().text_cursor.stroke.color = ink_on(fill);
+    // Match the grid's resolved ink, including explicit table and conditional font colours.
+    child.visuals_mut().override_text_color = Some(ink);
+    child.visuals_mut().text_cursor.stroke.color = ink;
     crate::formula_bar::editor_widget(app, &mut child, id, font, wrap, erect.width() - 4.0, erect.height() - 2.0);
     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("gridcraft.cell_editor.rect"), erect));
 }

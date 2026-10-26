@@ -186,6 +186,7 @@ scrollbar bugs 2–4 · pixel/feel pass against observed Excel 7–12.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-26 | minor | In-cell editing uses the grid's shared resolved style and active conditional-format cache, preserving table, conditional, scale and patterned fills plus explicit font colours for text and caret |
 | 2026-10-26 | minor | Automatic cell text and in-cell editor text/caret use the higher-contrast black or white ink; explicit bright green fills now use black in both themes |
 | 2026-10-26 | minor | Dark mode uses black default cells with white text, including merged cells and editing; gridlines, formula references and sheet controls follow the theme. Explicit workbook colours stay intact, with contrasting automatic text on filled cells |
 | 2026-10-25 | minor | AutoSum (Alt+=, Home › AutoSum) over a selected row puts its total to the right of the row, or in its last cell when that is empty, as in Excel; it wrote a one-cell total under each cell. A selection's empty last column takes each row's total and its empty last row each column's, with the block's total in the corner when both are empty |

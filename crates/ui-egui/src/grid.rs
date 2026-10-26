@@ -498,7 +498,7 @@ fn center_across_end(start: u32, limit: u32, continues: impl Fn(u32) -> bool) ->
     end
 }
 
-fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache) -> (Look, Option<CfLook>) {
+fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache, t: &Tokens) -> (Look, Option<CfLook>) {
     let mut style = wb.styles.get(sh.style_id(c)).clone();
     if let Some(t) = sh.table_at(c) {
         style = gridcraft_engine::tables::table_cell_style(wb, si, t, c);
@@ -559,7 +559,8 @@ fn look(wb: &Workbook, si: usize, sh: &Sheet, c: CellRef, cf: &mut CfCache) -> (
     {
         fill = Some(theme::color32(rgb));
     }
-    let text_color = col32(style.font.color, wb, Color32::BLACK);
+    let automatic = fill.map_or(t.cell_text, ink_on);
+    let text_color = col32(style.font.color, wb, automatic);
     (Look { style, fill, text_color }, cfl)
 }
 
@@ -1193,11 +1194,11 @@ pub(crate) fn paint_quadrant(
             Some(m) => (geo.range_rect(sh, m), m.start),
             None => (geo.cell_rect(sh, c), c),
         };
-        let (lk, cfl) = look(wb, si, sh, anchor, cf);
+        let (lk, cfl) = look(wb, si, sh, anchor, cf, t);
         if let Some(f) = lk.fill {
             p.rect_filled(rect.expand(0.0), 0.0, f);
         } else if in_merge(c).is_some() {
-            p.rect_filled(rect.shrink(0.5), 0.0, Color32::WHITE);
+            p.rect_filled(rect.shrink(0.5), 0.0, t.grid_bg);
         }
         looks.push((anchor, rect, lk, cfl));
     }
@@ -1213,7 +1214,7 @@ pub(crate) fn paint_quadrant(
         let right = (c1.saturating_add(1)..=c1.saturating_add(20).min(MAX_COLS - 1)).map(|col| CellRef::new(r, col)).find(|&n| !empty_ok(n));
         for n in [left, right].into_iter().flatten() {
             if same_pane(n.col) && sh.col_width(n.col) > 0.0 && in_merge(n).is_none() {
-                let (lk, cfl) = look(wb, si, sh, n, cf);
+                let (lk, cfl) = look(wb, si, sh, n, cf, t);
                 outside.push((n, geo.cell_rect(sh, n), lk, cfl));
             }
         }
@@ -1471,14 +1472,14 @@ pub(crate) fn paint_quadrant(
             if line.is_none() {
                 continue;
             }
-            let col = col32(line.color, wb, Color32::BLACK);
+            let col = col32(line.color, wb, t.cell_text);
             paint_border(p, pts, line.style, col);
         }
         if !b.diag_down.is_none() {
-            paint_border(p, [rect.left_top(), rect.right_bottom()], b.diag_down.style, col32(b.diag_down.color, wb, Color32::BLACK));
+            paint_border(p, [rect.left_top(), rect.right_bottom()], b.diag_down.style, col32(b.diag_down.color, wb, t.cell_text));
         }
         if !b.diag_up.is_none() {
-            paint_border(p, [rect.left_bottom(), rect.right_top()], b.diag_up.style, col32(b.diag_up.color, wb, Color32::BLACK));
+            paint_border(p, [rect.left_bottom(), rect.right_top()], b.diag_up.style, col32(b.diag_up.color, wb, t.cell_text));
         }
         // Comment / note indicator.
         if let Some(cm) = sh.comments.get(c) {
@@ -1634,8 +1635,8 @@ fn merged_edges(
             continue;
         }
         let (x0, x1) = (geo.x(sh, col), geo.x(sh, col.saturating_add(1)));
-        let top = look(wb, si, sh, CellRef::new(m.start.row, col), cf).0.style.borders.top;
-        let bottom = look(wb, si, sh, CellRef::new(m.end.row, col), cf).0.style.borders.bottom;
+        let top = look(wb, si, sh, CellRef::new(m.start.row, col), cf, &Tokens::light()).0.style.borders.top;
+        let bottom = look(wb, si, sh, CellRef::new(m.end.row, col), cf, &Tokens::light()).0.style.borders.bottom;
         out.push((top, [pos2(x0, rect.top()), pos2(x1, rect.top())]));
         out.push((bottom, [pos2(x0, rect.bottom()), pos2(x1, rect.bottom())]));
     }
@@ -1645,8 +1646,8 @@ fn merged_edges(
             continue;
         }
         let (y0, y1) = (geo.y(sh, row), geo.y(sh, row.saturating_add(1)));
-        let left = look(wb, si, sh, CellRef::new(row, m.start.col), cf).0.style.borders.left;
-        let right = look(wb, si, sh, CellRef::new(row, m.end.col), cf).0.style.borders.right;
+        let left = look(wb, si, sh, CellRef::new(row, m.start.col), cf, &Tokens::light()).0.style.borders.left;
+        let right = look(wb, si, sh, CellRef::new(row, m.end.col), cf, &Tokens::light()).0.style.borders.right;
         out.push((left, [pos2(rect.left(), y0), pos2(rect.left(), y1)]));
         out.push((right, [pos2(rect.right(), y0), pos2(rect.right(), y1)]));
     }
@@ -1857,7 +1858,7 @@ pub(crate) fn paint_selection(
     // Fill handle (bottom-right of the current area).
     if app.editor.is_none() && range_in_pane(RangeRef::cell(sel.current().end), rows, cols) {
         let h = Rect::from_center_size(outline.right_bottom(), vec2(6.0, 6.0));
-        p.rect_filled(h.expand(1.0), 0.0, Color32::WHITE);
+        p.rect_filled(h.expand(1.0), 0.0, t.grid_bg);
         p.rect_filled(h, 0.0, t.sel_border);
     }
     // Fill-handle drag preview.
@@ -3245,9 +3246,10 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     };
     // Grows to the left on a right-to-left sheet.
     let erect = geo.mirror_rect(Rect::from_min_size(rect.min, vec2(w, h)));
+    let t = Tokens::get(ui.ctx());
     let fill = match st.fill.pattern {
-        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(Color32::WHITE),
-        _ => Color32::WHITE,
+        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(t.grid_bg),
+        _ => t.grid_bg,
     };
     let split = pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h);
     let quadrant = Rect::from_min_max(
@@ -3272,8 +3274,8 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let id = egui::Id::unique("gridcraft.cell_editor");
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(erect.shrink2(vec2(2.0, 1.0))));
     child.set_clip_rect(clip);
-    // The theme's caret is meant for the UI chrome and vanishes on some fills (and, in the dark
-    // theme, on the white paper): pick black or white against the fill, like Excel.
+    // Keep the caret and editor text readable against the actual cell fill.
+    child.visuals_mut().override_text_color = Some(ink_on(fill));
     child.visuals_mut().text_cursor.stroke.color = ink_on(fill);
     crate::formula_bar::editor_widget(app, &mut child, id, font, wrap, erect.width() - 4.0, erect.height() - 2.0);
     ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("gridcraft.cell_editor.rect"), erect));
@@ -4334,6 +4336,30 @@ mod tests {
     }
 
     #[test]
+    fn automatic_cell_ink_follows_theme_and_fill_without_changing_explicit_colors() {
+        let mut session = gridcraft_engine::Session::new();
+        session.new_workbook();
+        session.execute("home.fillColor", json!({"range": "B1", "color": "#FFFF00"})).unwrap();
+        session.execute("home.fillColor", json!({"range": "C1", "color": "#1F3864"})).unwrap();
+        session.execute("home.fontColor", json!({"range": "D1", "color": "#FF0000"})).unwrap();
+        let wb = &session.active().unwrap().wb;
+        let sh = wb.sheet(0).unwrap();
+        let mut cf = CfCache::new();
+        for t in [Tokens::light(), Tokens::dark()] {
+            let automatic = look(wb, 0, sh, CellRef::new(0, 0), &mut cf, &t).0;
+            assert_eq!(automatic.text_color, t.cell_text);
+            assert_eq!(automatic.fill, None);
+            let light_fill = look(wb, 0, sh, CellRef::new(0, 1), &mut cf, &t).0;
+            assert_eq!(light_fill.fill, Some(Color32::YELLOW));
+            assert_eq!(light_fill.text_color, Color32::BLACK);
+            let dark_fill = look(wb, 0, sh, CellRef::new(0, 2), &mut cf, &t).0;
+            assert_eq!(dark_fill.fill, Some(Color32::from_rgb(0x1F, 0x38, 0x64)));
+            assert_eq!(dark_fill.text_color, Color32::WHITE);
+            assert_eq!(look(wb, 0, sh, CellRef::new(0, 3), &mut cf, &t).0.text_color, Color32::RED);
+        }
+    }
+
+    #[test]
     fn conditional_number_format_reaches_the_cell_text() {
         // #1163: a rule's number format replaces the cell's own; unmatched cells keep theirs.
         let mut session = gridcraft_engine::Session::new();
@@ -4347,7 +4373,7 @@ mod tests {
         let mut cf = CfCache::new();
         let text = |row: u32, cf: &mut CfCache| {
             let c = CellRef::new(row, 0);
-            let (lk, _) = look(&wb, 0, sh, c, cf);
+            let (lk, _) = look(&wb, 0, sh, c, cf, &Tokens::light());
             display_text(&wb, sh, c, &sh.value(c), &lk.style, 200.0, 7.0).0
         };
         assert_eq!(text(0, &mut cf), "1");
